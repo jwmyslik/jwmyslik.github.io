@@ -3,37 +3,84 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Under Construction</title>
+<title>Jordan Myslik</title>
 <style>
   body {
     margin: 0;
-    height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #222;
+    background: #fff;
+  }
+  .container {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem;
+  }
+  .profile {
     display: flex;
     align-items: center;
-    justify-content: center;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #1a1a2e;
-    color: #eaeaea;
-    text-align: center;
+    gap: 2rem;
+    margin-bottom: 2rem;
   }
-  .content h1 {
-    font-size: 2.5rem;
-    margin-bottom: 0.5rem;
+  .profile img {
+    width: 180px;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 50%;
   }
-  .content p {
-    font-size: 1.1rem;
-    color: #b0b0c0;
+  .profile h1 {
+    font-size: 2rem;
+    margin: 0;
   }
-  .emoji {
-    font-size: 3rem;
+  main p {
+    line-height: 1.6;
+    font-size: 1.05rem;
+  }
+  main a {
+    color: #2a5db0;
+    text-decoration: none;
+  }
+  main a:hover {
+    text-decoration: underline;
+  }
+  .social-links {
+    display: flex;
+    gap: 1.5rem;
+    list-style: none;
+    padding: 0;
+    margin: 2rem 0;
+  }
+  .social-links img {
+    width: 40px;
+    height: 40px;
+  }
+  @media (max-width: 480px) {
+    .profile {
+      flex-direction: column;
+      text-align: center;
+    }
   }
 </style>
 </head>
 <body>
-  <div class="content">
-    <div class="emoji">🚧</div>
-    <h1>Under Construction</h1>
-    <p>This site is currently being built. Check back soon!</p>
+  <div class="container">
+    <div class="profile">
+      <img src="images/profile.jpg" alt="Jordan Myslik">
+      <h1>Jordan Myslik</h1>
+    </div>
+
+    <main>
+      <p>I'm a Data Scientist with a background in experimental particle/nuclear physics, where I learned how to extract insights from 
+        complex, large-scale data. For the past six years, I've applied that expertise in the wine e-commerce industry, delivering 
+        data pipelines, dashboards, and analytics that support business decisions.</p>
+
+      <p>Feel free to connect with me on LinkedIn or GitHub:</p>
+
+      <ul class="social-links">
+        <li><a href="https://www.linkedin.com/in/jordan-myslik" title="LinkedIn"><img src="images/linkedin.png" alt="LinkedIn"></a></li>
+        <li><a href="https://github.com/jwmyslik" title="GitHub"><img src="images/github.png" alt="GitHub"></a></li>
+      </ul>
+    </main>
   </div>
 </body>
 </html>
