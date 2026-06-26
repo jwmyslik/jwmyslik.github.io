@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Predicting the Winner – Jordan Myslik</title>
+<style>
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #222;
+    background: #fff;
+  }
+  .container {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem;
+  }
+  h1 {
+    font-size: 2rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.5rem;
+    margin-top: 2.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid #eee;
+  }
+  p, li {
+    line-height: 1.6;
+    font-size: 1.05rem;
+  }
+  a {
+    color: #2a5db0;
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+  figure {
+    margin: 2rem 0;
+    text-align: center;
+  }
+  figure img {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid #eee;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>Predicting the Winner</h1>
+
+    <p>Beyond the obvious application in sports betting, finding ways to improve your team&rsquo;s chances of winning is the key to effective coaching. In curling, coaching focuses on two areas:</p>
+
+    <ul>
+      <li><strong>Strategy:</strong> Deciding which shots to call to maximize your chances of winning. A number of different factors go into this decision, such as the shot number in the end, whether your team has last rock advantage or not, the existing stone configuration, the skill level of your team and the opposing team, how you&rsquo;ve observed rocks to travel along the ice, and the current score.</li>
+      <li><strong>Accuracy:</strong> How well you can execute the shots that are called.</li>
+    </ul>
+
+    <p>In practice, winning or losing a curling game is based primarily on a combination of a team and their opponent&rsquo;s strategy and accuracy. A team&rsquo;s strategy is a little difficult to quantify, but a lot of effort goes into quantifying a team&rsquo;s accuracy, in what are called &ldquo;the stats&rdquo;.</p>
+
+    <p>You can read in detail how curling stats are assigned <a href="https://curlit.com/manuals">here</a>, but it basically boils down to &ldquo;for every shot, assign an integer number score between 0 and 4, where 0 is a total miss, and 4 is perfect execution.&rdquo; In our database of data extracted from the shot-by-shot summary PDF documents, this information is stored in the shots table in the percent_score column. You can find the Jupyter notebook for this analysis <a href="https://github.com/jwmyslik/curling-analytics/blob/master/Curling_Analytics-Accuracy_and_Win_Loss.ipynb">here</a>.</p>
+
+    <p>One thing we need to keep in mind with this data, once again, is that it represents international level competition. So, we expect these teams to have some of the most accurate shooters in the world, and to be well versed in the finer details of curling strategy. However, this could work to our advantage. If the teams are all roughly on the same level in terms of strategy, then the winner of the game should be decided almost entirely by the shot accuracy of each of the teams.</p>
+
+    <p>To see how well this hypothesis holds, I found the average percent_score for each team as a whole in each game by averaging the percent_score values sharing the same game_id and stone color. To draw a relationship between winning and losing without double-counting games, for each game I randomly selected a stone color to denote as the &ldquo;Team&rdquo;, hence labeling the other team as the &ldquo;Opposing Team&rdquo;. For the 1100 games with shot accuracy statistics, plotting team accuracy vs. opposing team accuracy, and whether the team won or lost, we arrive at the following plot.</p>
+
+    <figure>
+      <img src="images/game_accuracy.png" alt="Scatter plot of team accuracy vs. opposing team accuracy, colored by win/loss">
+    </figure>
+
+    <p>What we see here is that there is actually a pretty good relationship between the average shot accuracy of a team, the average shot accuracy of the opposing team, and whether the team wins or loses the game. Indeed, it looks like our expectation of &ldquo;the more accurate team wins the game&rdquo; roughly holds (i.e. a decision boundary of y = x). However, we can clearly see that Win and Loss are not perfectly separated by y = x, so it would be nice to have a model that attaches probabilities to its predictions.</p>
+
+    <p>Given that we only have 2 features and a linear decision boundary, logistic regression seems like a good choice here. Training the LogisticRegression model from sklearn.linear_model on a training set consisting of 70% of our data, we find an accuracy of 77% on the training set, and an accuracy of 82% on the test set. So we can do a pretty good job of predicting the winner even with data as coarse-grained as the average accuracy of each team in the game. To better understand this model, let&rsquo;s take a look at the probability map, with the data and the expected y = x decision boundary superimposed on top.</p>
+
+    <figure>
+      <img src="images/game_prob_map.png" alt="Probability map of win likelihood by team and opposing team accuracy">
+    </figure>
+
+    <p>The surprising thing about the above plot is that our decision boundary (the white line where P(Win) = 0.50) is not y = x. We selected the team and opposing team randomly, so there&rsquo;s no reason for the model to prefer a team with lower accuracy winning over a team with higher accuracy. However, there are a few things to keep in mind:</p>
+
+    <ol>
+      <li>The majority of points are clustered between 60% and 90% accuracy, and in that range the model is pretty close to a y = x decision boundary.</li>
+      <li>The relationship between accuracy and win/loss is not necessarily clean. There&rsquo;s strategy to consider, and sometimes just luck (some misses may hurt you more or less than others strategically, but they all affect the average just the same.)
+        <ul>
+          <li>There are some examples above where a team shot almost 20% more accurately than the opposing team, but still lost the game.</li>
+        </ul>
+      </li>
+    </ol>
+
+    <p>So, this model appears to be biased somewhat by the specific data points in this training set. It nonetheless demonstrates that there is a relationship between shot accuracy and game outcome in this data, with significant prediction power.</p>
+
+    <p>However, predicting the outcome of a game that&rsquo;s already happened based on the average team performance during that game isn&rsquo;t terribly useful. What would be really interesting is if we could predict the outcome of a future game using a team&rsquo;s average performance over many games. Thankfully, our data has enough information to attempt that.</p>
+
+    <p>Within each event, the same team name and game type (Men or Women) represents the same team of players. Events typically consist of &ldquo;round robin play&rdquo;, where all teams play each other, and then semi-finals and finals based on how well they do in round robin play. So we could use data on round robin play to predict who wins the Finals, but in this data set that means only 24 Finals games, a relatively small number of data points to train a model on. However, if we assume that a team&rsquo;s average accuracy over all games is a good predictor of the team&rsquo;s accuracy in a given game, we can just use all the games in our data set, using in our model the average shot accuracy over all games the team played, instead of just their average shot accuracy for that game.</p>
+
+    <p>Computing those averages, I noticed that there are a small number of outlier cases where a team appears to have only played one game in an event. To prevent this from skewing the model, games with a team with an average shot accuracy based on fewer than 100 shots were excluded. Plotting the 1077 games that remain gives us the following:</p>
+
+    <figure>
+      <img src="images/event_accuracy.png" alt="Scatter plot of team accuracy vs. opposing team accuracy, averaged over all games">
+    </figure>
+
+    <p>So, we see that the points are more tightly clustered, which we&rsquo;d expect having averaged the teams&rsquo; accuracy over many games, and used the average instead of the higher-spread individual-game accuracy. It&rsquo;s also notable that there still appears to be a good amount of discriminatory power here. Training a logistic regression model on 70% of this data gives us an accuracy of 74% on the training set, and 73% on the test set. This is not as good as the model based on the actual in-game data, but is still pretty good. Plotting the probability map with the training set and the expected y = x decision boundary superimposed gives us:</p>
+
+    <figure>
+      <img src="images/event_prob_map.png" alt="Probability map of win likelihood by team and opposing team season-average accuracy">
+    </figure>
+
+    <p>Here the logistic regression model appears to have found the expected y = x decision boundary, possibly helped along by the tighter clustering of the points. The area between 0% and 100% probability of the team winning is more compressed here due to this as well. How accurate these probability estimates are is something that is probably worth additional investigation in a future analysis.</p>
+
+    <h2>Conclusions and Next Steps</h2>
+
+    <p>We&rsquo;ve seen how the shot accuracy of the two teams playing a game has predictive power as to who wins the game, and that this also extends to a team&rsquo;s average performance, giving us the power to make predictions for future games. I&rsquo;ve trained a logistic regression model to do so with almost 75% accuracy, which also provides probability estimates of its predicted outcomes.</p>
+
+    <p>This is probably the simplest model possible for this data, and its accuracy is already pretty good. We&rsquo;ve only scratched the surface here, as there is much more that can be considered:</p>
+
+    <ul>
+      <li>How accurate is a team&rsquo;s shooting as a function of time?</li>
+      <li>Do we gain more discriminating power by breaking the average shot accuracy down by position (Lead, Second, Vice, Skip)?</li>
+      <li>Do we gain more discriminating power by breaking the averages down by shot type? &ldquo;Draw&rdquo; or &ldquo;Take-Out&rdquo; are typically used by curling commentators (which I believe is equivalent to &ldquo;Not Hit&rdquo; and &ldquo;Hit&rdquo; respectively from our previous shot type analysis).</li>
+      <li>How is all of this related to the final score of the game?</li>
+    </ul>
+
+    <p>One thing is for sure: There is a relationship between a team&rsquo;s shot accuracy, their opponent&rsquo;s shot accuracy, and whether they win or lose the game. Building a more fine-grained model taking into account these additional features may allow us to more accurately predict the game outcome. Also, incorporating some of the above questions makes the model more valuable to coaching, as you can target your players&rsquo; practice in improving accuracy in areas most likely to have the highest impact on your team&rsquo;s success. So, this study is just the beginning of my look into shot accuracy and predicting the winner of curling games. Stay tuned for a more detailed analysis of this topic in the future!</p>
+  </div>
+</body>
+</html>

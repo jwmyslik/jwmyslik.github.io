@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Curling Analytics – Jordan Myslik</title>
+<style>
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #222;
+    background: #fff;
+  }
+  .container {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem;
+  }
+  h1 {
+    font-size: 2rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 {
+    font-size: 1.5rem;
+    margin-top: 2.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid #eee;
+  }
+  h3 {
+    font-size: 1.15rem;
+    margin-top: 2rem;
+  }
+  p, li {
+    line-height: 1.6;
+    font-size: 1.05rem;
+  }
+  a {
+    color: #2a5db0;
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+  figure {
+    margin: 2rem 0;
+    text-align: center;
+  }
+  figure img {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid #eee;
+  }
+  .figure-row {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    margin: 2rem 0;
+    flex-wrap: wrap;
+  }
+  .figure-row figure {
+    flex: 0 0 auto;
+    max-width: 280px;
+    margin: 0;
+  }
+  .figure-row ul {
+    flex: 1 1 250px;
+    margin: 0;
+  }
+  table {
+    border-collapse: collapse;
+    margin: 2rem auto;
+  }
+  table td {
+    border: 1px solid #ddd;
+    padding: 0.5rem 1.5rem;
+    text-align: center;
+  }
+  @media (max-width: 600px) {
+    .figure-row {
+      flex-direction: column;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>Curling Analytics</h1>
+
+    <p>Growing up in Canada, curling is a very popular sport, which I have played both competitively and socially at different points in my life. As it turns out, there is a wealth of data available on curling games, but it is mostly available in the form of PDF documents with diagrams of the playing area (that is, not readily analyzable). In this &ldquo;Curling Analytics&rdquo; project, I extract this data into an SQL database, and perform analyses of it.</p>
+
+    <p>In this case, the &ldquo;wealth of data&rdquo; consists of 1,269 games spread across 24 events, for a total of 182,775 shots across 11,472 ends. There is a lot that can be done with this data, so stay tuned for future analyses! Currently, this project is broken down into the following sections:</p>
+
+    <ul>
+      <li><a href="#curling-intro">A Brief Introduction to Curling</a></li>
+      <li><a href="#datasource">Getting the Data</a></li>
+      <li><a href="#dbcontents">Storing the Data</a></li>
+      <li><a href="#initialexploration">Initial Exploration</a></li>
+      <li><a href="#menvswomen">Battle of the Sexes: Investigating a Game Strategy Gender Stereotype</a></li>
+    </ul>
+
+    <p>You can find all the code written for this project <a href="https://github.com/jwmyslik/curling-analytics">here on my GitHub</a>.</p>
+
+    <p>Further analyses of this data are written up on their own dedicated pages. You can find them here:</p>
+
+    <ul>
+      <li><a href="predicting-the-winner/">Predicting the Winner</a></li>
+    </ul>
+
+    <h2 id="curling-intro">A Brief Introduction to Curling</h2>
+
+    <p>In the sport of curling (as traditionally played), in each game two teams of 4 players each play against each other. The game is played on a <em>sheet</em> of ice, which looks like this:</p>
+
+    <figure>
+      <img src="images/sheet_drawing.png" alt="Diagram of a curling sheet">
+    </figure>
+
+    <p>A player launches from the hack on one end of the sheet with a stone in hand, slides out, and releases the stone before crossing the closest hack line to them. A stone is in play if it is past the hack line on the other end of the sheet, but not past the back line on that end.</p>
+
+    <p>In each round (called an <em>end</em>) each player throws two stones, with successive shots alternating between the two teams. The team to throw the last stone in the end is said to have <em>last rock advantage</em>, also known as <em>the hammer</em>. Which team gets the hammer in the first end is decided by coin toss, with the other team getting their choice of stone color. When a team scores in an end, the other team has the hammer in the next end. As a matter of strategy, it is generally considered not worthwhile to give up the hammer for only one point. Curling games are typically 8 or 10 ends in length, and at the end of the game the team with the most points wins. In the event of a tie, sometimes an extra end is played, though in some cases the game is just decided by which team can throw a stone closest to the button.</p>
+
+    <p>The scoring at the end of each end is done by examining the stone configuration in the <em>house</em>, which is made up of the <em>button</em>, and three concentric rings (the <em>4 foot, 8 foot,</em> and <em>12 foot</em>, all named by their outer diameter.) Rocks that are inside (or at the very least in contact with, called <em>biting</em>) the house can count for points. At the end of the end, the team with the stone closest to the center of the button (the <em>pin</em>) scores points, and the number of points scored is equal to the number of stones they have in the house that are closer to the pin than any of the opposing team&rsquo;s stones.</p>
+
+    <p>The four positions of each team are named according to the typical shot order:</p>
+
+    <ol>
+      <li>Lead</li>
+      <li>Second</li>
+      <li>Vice</li>
+      <li>Skip</li>
+    </ol>
+
+    <p>The Skip is the player that &ldquo;calls the shots&rdquo;, standing on the side of the sheet with the stones in play, determining the strategy for the game, directing the throwing player where to aim, which direction turn to put on the stone, and how hard to throw it. While one player is throwing, the other two players follow their stone down the ice, sweeping in front of it to help it move farther or stay on a straighter path, as needed. The Skip will typically direct them in matters of straightness (as they can see the angles), but the two players sweeping have a better idea whether the rock needs to be swept for speed.</p>
+
+    <p>When it is time for the Skip to throw their stones, the Vice comes down to the side of the sheet with the stones in play, confers with the Skip on strategy, and plays the Skip&rsquo;s roll for the Skip&rsquo;s shot.</p>
+
+    <p>In this dataset, there are the following types of shots called:</p>
+
+    <ul>
+      <li><strong>Clearing:</strong> A hit, where a guard (a stone in front of the house) is removed from play, along with the rock that was thrown.</li>
+      <li><strong>Double Take-out:</strong> A hit that removes two stones from play.</li>
+      <li><strong>Draw:</strong> Place a stone inside the house.</li>
+      <li><strong>Freeze:</strong> Place a stone so that it is touching another stone, but did not move it.</li>
+      <li><strong>Front:</strong> Place a stone in front of the house, blocking the button (i.e. a special case of &ldquo;Guard&rdquo;).</li>
+      <li><strong>Guard:</strong> A stone in front of the house, blocking an area of strategic importance or protecting a stone from being hit.</li>
+      <li><strong>Hit and Roll:</strong> A hit where the hitting stone travels to a specific location before stopping.</li>
+      <li><strong>Promotion Take-out:</strong> A hit where a stone is hit and pushed back (&ldquo;promoted&rdquo;) so that it hits another stone to remove it from play.</li>
+      <li><strong>Raise:</strong> A stone is used to move a stone in play farther down the sheet. (For example, a guard in front of the button could be <em>raised</em> to the button.)</li>
+      <li><strong>Take-out:</strong> A hit, the thrown stone removes another stone from play.</li>
+      <li><strong>Through:</strong> Throw the rock through the house and out of play. Normally done when trying to limit the number of rocks in play (&ldquo;keeping it clean&rdquo;) or if there are no stones in play in the last rock of the end and you don&rsquo;t want to give up last rock advantage for one point.</li>
+      <li><strong>Wick / Soft Peeling:</strong> Two conceptually similar shots:
+        <ul>
+          <li><strong>Soft Peeling:</strong> A lower power version of &ldquo;Clearing&rdquo;, where a rock is used to move a guard out of the way, but keep it in play. One might use this during the 4 rock free guard zone (see below) to make a guard placed by the opposing team less useful.</li>
+          <li><strong>Wick:</strong> Bounce your stone off of another stone in play, to chain your stone&rsquo;s direction, (e.g. if you want to put your stone behind another stone, but curling it there directly is not open, and there&rsquo;s another stone you can bounce off of.)</li>
+        </ul>
+      </li>
+    </ul>
+
+    <p>There is one additional rule concerning shot types that is worth explaining, called <em>the 4 rock free guard zone</em>. At the beginning of each end, 4 stones must be thrown before any stones in play outside of the house and between the tee-line and the hog line can be removed from play. This is nominally to prevent &ldquo;each team just removes the opposing team&rsquo;s stone from play with their shot&rdquo; from being the best strategic play (that would make for a very boring game!).</p>
+
+    <p>Now that we understand the basics of curling, let&rsquo;s start digging into the data!</p>
+
+    <h2 id="datasource">Getting the Data</h2>
+
+    <p>As the world governing body of the Olympic and Paralympic Winter Sport of Curling, the <a href="http://worldcurling.org/">World Curling Federation</a> produces (and makes available) shot-by-shot summary PDF documents of most games in the World-level events under their purview. For each shot, the information is typically formatted as:</p>
+
+    <div class="figure-row">
+      <figure>
+        <img src="images/shot_by_shot_drawing.png" alt="Example shot-by-shot summary diagram">
+      </figure>
+      <ul>
+        <li>A diagram of the area of the sheet currently in play.</li>
+        <li>A code denoting the player&rsquo;s team (TEAM, typically a 3 letter country code).</li>
+        <li>The player&rsquo;s name.</li>
+        <li>The type of shot that was called.</li>
+        <li>The direction of rotation of the rock (the &ldquo;turn&rdquo;).</li>
+        <li>A score of how accurately the player executed the shot that was called (0-4, or 0% to 100% in 25% increments, with 100% being &ldquo;perfectly executed&rdquo;.)</li>
+      </ul>
+    </div>
+
+    <p>I used a python script to traverse the directory structure where these shot-by-shot summaries are stored, extracting information on the event name, game name, and whether it is a Men&rsquo;s or Women&rsquo;s game from the directory path. Using the Linux &ldquo;pdftohtml -xml&rdquo; command to convert the PDF files into XML, I was able to extract the above shot-by-shot textual information using the positions provided in the XML tags, and knowledge of the relative positions of this information relative to the diagram of the area in play. These pages can also include a box with information on the score and the time remaining for each team, which I also extracted using relative positions in the XML document.</p>
+
+    <p>Extracting the stone positions from the diagram of the area in play posed more of a challenge. Looking through a few of the shot-by-shot summaries, thankfully the following rules tend to hold:</p>
+
+    <ul>
+      <li>Rocks not played are smaller in size, on the end of the diagram opposite the house.</li>
+      <li>Rocks that are out of play are all behind the back line (behind the house).</li>
+      <li>Red rocks are always RGB (255, 0, 0), and yellow rocks are always RGB (255, 255, 0), with a blue (0, 0, 255) &ldquo;X&rdquo; through them.
+        <ul>
+          <li>In practice, there were slight variations on these colors present, so the ranges of acceptable colors were tweaked slightly to accommodate.</li>
+        </ul>
+      </li>
+      <li>Indicators of a rock&rsquo;s previous position are a hollow circle of that rock&rsquo;s color.</li>
+      <li>The positioning of the button and the house is consistent to within a pixel or so, when converting between directions of play.</li>
+    </ul>
+
+    <p>With this information and Python&rsquo;s OpenCV2 module, I defined a mask for each stone&rsquo;s color profile, and found the contours in the mask, taking their centroids to get the stone positions. The size and position of stones allowed me to filter out stones that were out of play, and to determine the direction of play (based on the location of the smaller, unplayed stones) and match a team&rsquo;s country code to its rock color (based on which team has only 7 stones left unplayed after the first shot).</p>
+
+    <p>The only minor frustration with the stone positions is that based on measuring the diameters of the rings, the diagram is not actually a to-scale representation of the curling sheet. So instead of converting to a unit of measurement, stone positions are stored as pixel positions. However, I did standardize to the &ldquo;down&rdquo; direction of play (house at the bottom, as the skip would see it), and converted the coordinate system so that (0,0) is at the center of the button.</p>
+
+    <p>With the problem of extracting the data solved, let&rsquo;s discuss how I chose to store it.</p>
+
+    <h2 id="dbcontents">Storing the Data</h2>
+
+    <p>Looking at the structure of a curling competitive event gives us a clear hierarchical structure:</p>
+
+    <ul>
+      <li>The event itself.</li>
+      <li>The games within the event.</li>
+      <li>The ends within a game.</li>
+      <li>The shots in each end.</li>
+      <li>The positions of the stones in play after each shot.</li>
+    </ul>
+
+    <p>So, it makes sense to reproduce this hierarchical structure in an SQL database with a table for each step of the hierarchy, each containing a foreign key referencing the next step up the hierarchy. I chose SQLite for this database, since the database is relatively simple and small, and doesn&rsquo;t require remote access by multiple users. This SQL database has the following schema (produced using <a href="http://dbdiagram.io/">dbdiagram.io</a>):</p>
+
+    <figure>
+      <img src="images/schema.png" alt="Database schema diagram">
+    </figure>
+
+    <p>Let&rsquo;s now go through each table and define the contents of each of the columns.</p>
+
+    <h3>events</h3>
+    <ul>
+      <li><strong>id:</strong> The id number of the event (the primary key).</li>
+      <li><strong>name:</strong> An abbreviation of the name of the event, taken from the top-level directory name its shot-by-shot summaries are stored in.</li>
+      <li><strong>start_date:</strong> The date of the first game of this event.</li>
+      <li><strong>end_date:</strong> The date of the last game of this event.</li>
+    </ul>
+
+    <h3>games</h3>
+    <ul>
+      <li><strong>id:</strong> The id number of the game (the primary key).</li>
+      <li><strong>event_id:</strong> The id number of the event that this game is a part of. (The foreign key).</li>
+      <li><strong>session:</strong> The session name from the folder where the shot-by-shot summary was stored.</li>
+      <li><strong>name:</strong> Normally matches the session name, though may contain different information (e.g. group name, if the round robin was broken up into groups.)</li>
+      <li><strong>sheet:</strong> The identifier of the sheet the game is being played on.</li>
+      <li><strong>type:</strong> The kind of game (currently either &ldquo;Men&rdquo; or &ldquo;Women&rdquo;. Data is also available for &ldquo;Mixed Doubles&rdquo;, though I did not extract it.)</li>
+      <li><strong>start_date:</strong> The date of the game in YYYY:MM:DD format.</li>
+      <li><strong>start_time:</strong> The time the game started in HH:MM (24 hour clock) format.</li>
+      <li><strong>team_red:</strong> The short name (e.g. CAN, USA, SWE, SCO, etc.) of the red team.</li>
+      <li><strong>team_yellow:</strong> The short name of the yellow team.</li>
+      <li><strong>final_score_red:</strong> The final score of the red team.</li>
+      <li><strong>final_score_yellow:</strong> The final score of the yellow team.</li>
+    </ul>
+
+    <h3>ends</h3>
+    <ul>
+      <li><strong>id:</strong> The id number of the end (the primary key).</li>
+      <li><strong>game_id:</strong> The id number of the game that this end is a part of (the foreign key).</li>
+      <li><strong>number:</strong> The number of the end in the game (typically ranges from 1 to 10, though some games are shorter, or can go to an extra end due to a tie.)</li>
+      <li><strong>direction:</strong> The direction of play on the sheet, given by whether the house is at the top of the shot diagram (&ldquo;up&rdquo;) or at the bottom (&ldquo;down&rdquo;). All stone positions are converted to the &ldquo;down&rdquo; coordinate system for consistency.</li>
+      <li><strong>color_hammer:</strong> Color of stones thrown by the team with the hammer (last rock advantage).</li>
+      <li><strong>score_red:</strong> The red team&rsquo;s score at the end of this end.</li>
+      <li><strong>score_yellow:</strong> The yellow team&rsquo;s score at the end of this end.</li>
+      <li><strong>time_left_red:</strong> How much time remains on the red team&rsquo;s clock at the end of this end, in seconds.</li>
+      <li><strong>time_left_yellow:</strong> How much time remains on the yellow team&rsquo;s clock at the end of this end, in seconds.</li>
+    </ul>
+
+    <h3>shots</h3>
+    <ul>
+      <li><strong>id:</strong> The id number of the shot (the primary key)</li>
+      <li><strong>end_id:</strong> The id number of the end that this shot is a part of (the foreign key).</li>
+      <li><strong>number:</strong> The number of this shot in the end (normally 1 to 16).</li>
+      <li><strong>color:</strong> The color of the stone being shot (red or yellow).</li>
+      <li><strong>team:</strong> The short name of the team making the shot (e.g. CAN, USA, JPN, etc.).</li>
+      <li><strong>player_name:</strong> The name of the player taking the shot.</li>
+      <li><strong>type:</strong> A string categorizing the type of shot being made (e.g. Draw, Take-out, Hit and Roll, etc.).</li>
+      <li><strong>turn:</strong> &ldquo;In&rdquo; or &ldquo;Out&rdquo; in older games where this terminology was used. &ldquo;Clockwise&rdquo; or &ldquo;Counterclockwise&rdquo; in the later games, referring to the rotation direction of the rock. Translating between these conventions requires knowledge of the handedness of the player, so this data was left as-is. (For a right-handed player they correspond respectively, for a left-handed player it is the opposite.)</li>
+      <li><strong>percent_score:</strong> The percentage score assigned to each shot, stored as a real number. Ranges from 0 (a complete miss) to 100 (perfectly executed.) Normally just an integer number on a 0 to 4 point scale (0, 25, 50, 75, 100).</li>
+    </ul>
+
+    <h3>stone_positions</h3>
+    <ul>
+      <li><strong>id:</strong> The id number of this stone position entry (the primary key).</li>
+      <li><strong>shot_id:</strong> The id number of the shot that this stone position was recorded after.</li>
+      <li><strong>color:</strong> The color of the stone (red or yellow).</li>
+      <li><strong>x:</strong> The x position of this stone, in the &ldquo;down&rdquo; coordinate system, with (0,0) at the center of the button.</li>
+      <li><strong>y:</strong> The y position of this stone, in the &ldquo;down&rdquo; coordinate system, with (0,0) at the center of the button.</li>
+    </ul>
+
+    <h2 id="initialexploration">Initial Exploration</h2>
+
+    <p>Although I was pretty careful to test my data extraction code as I went along, once I had completed extracting the data from the PDF shot-by-shot summaries, I went through each table in the database column-by-column, to check whether the extracted data was reasonable. The full Jupyter notebook with this exploration is <a href="https://github.com/jwmyslik/curling-analytics/blob/master/Curling_Analytics-Preliminary_Data_Exploration.ipynb">here on my GitHub</a>.</p>
+
+    <p>To summarize some of the more impactful or interesting observations:</p>
+
+    <ul>
+      <li>In the games table, session names are reliable, but the numerical values included in them mean that &ldquo;Semi-Finals&rdquo; or &ldquo;Finals&rdquo; may not be consistently named in different events. As stated earlier, the names table sometimes contains this information, sometimes contains other information (like the &ldquo;Group&rdquo; ID), or no information at all. The PDF formatting here was not consistent enough for this to be more reliable.</li>
+      <li>The team&rsquo;s name is almost always a 3 letter country code, except for an event where Canada fielded two teams (CAN1 and CAN2).</li>
+      <li>10% of the games in the games table have no final score recorded, and 30% of ends in the ends table have no score recorded, due to missing score boxes.
+        <ul>
+          <li>I chose the score box to extract the score because it was easiest to parse, but apparently it is missing a lot of the time.</li>
+          <li>There is score information available elsewhere on the page that could be extracted instead.</li>
+          <li>The score could also be reconstructed from the stone positions in the last shot of the end easily enough as well.</li>
+        </ul>
+      </li>
+      <li>The time_left variable is even more problematic, missing from 80% of ends, either due to a missing score box or just being entered as 0:00. There is unfortunately no other way to get this information.</li>
+      <li>There are a few artifacts that have appeared in the diagram of the playing area at times, and disrupted the determination of the team color with the hammer. This is an extreme edge case (something like 0.1% of ends).</li>
+      <li>Very rarely the turn column in the shots table picks up a notation of a non-standard situation (like &ldquo;Free guard zone violation&rdquo;) instead of any turn.</li>
+    </ul>
+
+    <p>I also produced a plot during this initial exploration that is worth discussing here. As a check on the validity of the positions stored in the stone_positions table, I produced a heat map of all the stone positions. Recall that in stone_positions, all positions are oriented with the house at the bottom, and the center of the button (&ldquo;the pin&rdquo;) at (0,0), with positive x going to the right, negative x going to the left, positive y towards the hog line, and negative y towards the back line. The range of this plot is based on the range of positions in the stone_positions table, and given the nearly 700,000 positions it contains, the full range of the area in play should be covered. To further guide the eye, we should also note that the back line (minimum y) and the front of the house should be equidistant from (0,0). Without further ado, here is the plot:</p>
+
+    <figure>
+      <img src="images/stone_positions_plot.png" alt="Heat map of stone positions" style="max-width: 434px;">
+    </figure>
+
+    <p>So, what do we see here?</p>
+
+    <ul>
+      <li>A large concentration of stones near the button (near (0,0)), with a clear bias towards being in front of the button. This makes sense, since the button is the most desirable place to be for scoring, but if the stone goes past the tee line (to negative y), you leave open a draw (with your stone as backing) to a better scoring position for the opposing team. So, if the goal is &ldquo;as close to the center of the button as possible, but no further&rdquo;, a bias for stones to be in front of the button makes sense.</li>
+      <li>A large concentration of stones near the centre line just outside the house (near (0,130)). This is where a &ldquo;center guard&rdquo; is typically placed (often as the first shot in an end) to give cover for a stone on the button.</li>
+      <li>Increased concentrations of stones off to the sides of the button, and protecting these positions out in front of the house. These both factor into the strategy if you have last rock advantage (i.e. try to place and protect a stone towards the side of the house, typically the 8-foot, while keeping the button open, nominally allowing you to draw to the button on the last shot for 2 points.)</li>
+    </ul>
+
+    <p>So, the initial exploration of the data shows that it looks reasonable, with a few caveats based on which table columns are being used. In particular, the stone_positions table also shows that popular positions make sense in the context of basic curling strategy. With the data sufficiently understood, let&rsquo;s proceed to some more in-depth analyses.</p>
+
+    <h2 id="menvswomen">Battle of the Sexes: Investigating a Game Strategy Gender Stereotype</h2>
+
+    <h3>Introduction</h3>
+
+    <p>Growing up a young curler, there was a well-known gender stereotype concerning a difference in strategy between Men&rsquo;s and Women&rsquo;s games. It can be summarized as this:</p>
+
+    <ul>
+      <li>Men prefer a more &ldquo;violent&rdquo; strategy that tends towards more hits, resulting in fewer stones in play.</li>
+      <li>Women prefer a more &ldquo;finesse&rdquo; strategy that tends towards fewer hits, resulting in more stones in play.</li>
+    </ul>
+
+    <p>Or, more succinctly, &ldquo;Men prefer to hit more than Women.&rdquo;</p>
+
+    <p>In fact, I even remember one coach claiming that because of this, he preferred to watch Women&rsquo;s games over Men&rsquo;s games, because less hitting means more stones in play, which makes for more complicated shots to watch the players make.</p>
+
+    <p>So not only is this difference between Men and Women claimed to exist, it is also claimed to be so pronounced that it is readily apparent to someone watching a curling game. This data set contains data for over 80,000 shots for Men and Women <strong>each</strong>, spread out over 5,000 ends <strong>each</strong>, so this data set should be more than sufficient to spot such an apparently obvious difference.</p>
+
+    <h3>Methodology</h3>
+
+    <p>The nature of this stereotype gives us two main options for checking its veracity from the data:</p>
+
+    <ol>
+      <li><strong>Shot Type Analysis:</strong> Checking whether Women actually call significantly fewer &ldquo;hit&rdquo; type shots than Men.</li>
+      <li><strong>Stones in Play Analysis:</strong> Checking whether the maximum number of stones in play in each end is actually higher for the Women&rsquo;s games than the Men&rsquo;s games.</li>
+    </ol>
+
+    <p>Both of these analyses strike to the heart of the stereotype. The Shot Type Analysis looks directly at the strategy preferences of Women vs. Men with regards to hits. The Stones in Play Analysis addresses the part of the stereotype that correlates less hitting with more rocks in play. We will therefore look at this claim from both directions, acting as a cross-check of each other.</p>
+
+    <p>For both analyses, we can produce histograms or bar charts of the relevant quantities, and generate contingency tables from these plots to feed into a &chi;&sup2; test to determine the statistical significance of any difference we observe.</p>
+
+    <p>Before proceeding to the analyses, we need to make an important distinction. Both of these datasets are pretty large: 80,000 shots for Men and Women each, and 5000 ends for Men and Women each. This is ostensibly enough data that we could find a statistically significant difference between Men and Women that is nonetheless too small to perceive on the scale of one game. Remember, the stereotype we are looking into includes the claim that it is obvious to the average person watching a game. So in both analyses, we should use the whole dataset to determine the average shot type or maximum stones in play distribution, and apply it to a game (80 shots by one team), and see whether it is statistically significant (i.e. something a viewer could see) while watching one game.</p>
+
+    <p>In all cases, our null hypothesis is that Men and Women call hits equally, and we set our threshold to reject the null hypothesis if p &lt; 0.05.</p>
+
+    <p>The full Jupyter notebook for this analysis can be found <a href="https://github.com/jwmyslik/curling-analytics/blob/master/Curling_Analytics-Men_vs_Women_Strategy.ipynb">here on my GitHub</a>.</p>
+
+    <h3>Analysis 1: Shot Type</h3>
+
+    <p>As we discussed earlier in &ldquo;A Brief Introduction to Curling&rdquo;, the various shot types called by the skip are included in the shot-by-shot summaries, and have been tabulated in the SQL database. Cleaning this data further by filtering out instances of &ldquo;None&rdquo;, &ldquo;no statistics&rdquo;, and &ldquo;not played&rdquo;, and merging the &ldquo;through&rdquo; and &ldquo;Through&rdquo; shot types into &ldquo;Through&rdquo;, we find that we have 93,112 shots from Men&rsquo;s games, and 84,818 shots from Women&rsquo;s games to consider. Having an unequal number of shots for Men and Women, we plot the percentage of each shot type by gender.</p>
+
+    <figure>
+      <img src="images/shot_type_plot.png" alt="Shot type percentage by gender" style="max-width: 785px;">
+    </figure>
+
+    <p>Taking a broad first look, the stereotype appears to be on shaky ground, as the percentages of each shot type for Men and Women appear to be remarkably similar. Furthermore, the &ldquo;Take-out&rdquo; shot type, the most common type of hit, is actually called by Women MORE than it is by Men. That said, the higher power, more difficult hits (Clearing, Double Take-out, and Promotion Take-out) are called slightly more by Men than Women, but this is still not much of a difference.</p>
+
+    <p>Feeding the shot type data into a &chi;&sup2; test tells us that there is definitely a statistically significant difference between the shots called by Men and Women (p = 2 &times; 10<sup>&minus;110</sup>), at least on the scale of the full dataset.</p>
+
+    <p>However, the stereotype claims that the difference between Men and Women is obvious when you are watching a game. So if we use the fraction of each shot type to get a shot type distribution for a team&rsquo;s shots in one game (a total of 80 shots), we would expect to see a statistically significant difference between Men and Women. Alas, we do not (p = 0.9999987). So we are forced to conclude that yes, there is a difference in the shots called by Men and Women, but no, it is not big enough to see when you are watching a curling game.</p>
+
+    <p>This shot type comparison was ultimately more fine-grained than the stereotype claimed. To answer the question of &ldquo;Do Men hit more than Women?&rdquo;, we should categorize all of the shot types as either &ldquo;Hit&rdquo; or &ldquo;Not Hit&rdquo;, and repeat the analysis with only those two shot categories. A Draw obviously falls under &ldquo;Not Hit&rdquo;, and a Take-out obviously falls under &ldquo;Hit&rdquo;, but some shot types straddle the boundary, and require a judgement call:</p>
+
+    <ul>
+      <li>Hit and Roll: This type of shot is primarily a hit, but does have the more finesse component of having the thrown stone go somewhere specific. I have classified this as a Hit.</li>
+      <li>Raise: Although the thrown stone does hit another one with this shot type, this shot is for moving a stone to a more favorable location, still in play. This strikes me as more of a finesse shot, requiring careful control of the stone&rsquo;s momentum to pull off, so I have classified them as &ldquo;Not Hit&rdquo;.</li>
+      <li>Wick / Soft Peeling: The Wick (bouncing the thrown stone off another rock to change direction) is definitely a finesse shot, while Soft Peeling strays closer to what we would classify as a hit, but nonetheless involves a lot of finesse (fine control of the stone&rsquo;s momentum, instead of a show of brute force.) I have therefore classified this category as &ldquo;Not Hit&rdquo;.</li>
+    </ul>
+
+    <p>So, this gives us the following shot types in each category:</p>
+
+    <table>
+      <tbody>
+        <tr><td><strong>Hit</strong></td><td><strong>Not Hit</strong></td></tr>
+        <tr><td>Clearing</td><td>Draw</td></tr>
+        <tr><td>Double Take-out</td><td>Freeze</td></tr>
+        <tr><td>Hit and Roll</td><td>Front</td></tr>
+        <tr><td>Promotion Take-out</td><td>Guard</td></tr>
+        <tr><td>Take-out</td><td>Raise</td></tr>
+        <tr><td></td><td>Through</td></tr>
+        <tr><td></td><td>Wick / Soft Peeling</td></tr>
+      </tbody>
+    </table>
+
+    <p>With these categories in mind, here are how the fractions of &ldquo;Hit&rdquo; and &ldquo;Not Hit&rdquo; shots break down between Men and Women:</p>
+
+    <figure>
+      <img src="images/hit_not_hit_plot.png" alt="Hit vs. not-hit percentage by gender" style="max-width: 888px;">
+    </figure>
+
+    <p>This comparison seems to make Men and Women look even closer, though here Men take a slight edge over Women in percentage of Hit type shots. Performing the &chi;&sup2; test on the Hit/Not Hit counts for Men and Women in the dataset gives us a p-value of p = 0.07, which just misses the threshold of 0.05 for rejecting the null hypothesis that Men and Women call Hits equally. It goes without calculating that if we don&rsquo;t see a statistically significant effect on the scale of the full dataset of shots, a &ldquo;Hit&rdquo; vs. &ldquo;Not Hit&rdquo; difference between Men and Women would certainly not be noticeable on the scale of a game or even a whole event.</p>
+
+    <p>In conclusion, I can&rsquo;t find any support in the shot type data for the stereotype that Men call hit shots more than Women. There is definitely a statistically significant difference between the shot types called by Men and Women (that may be worthy of further probing in a future analysis), but this difference is small enough that you wouldn&rsquo;t notice it on the scale of an individual game.</p>
+
+    <h3>Analysis 2: Stones in Play</h3>
+
+    <p>This analysis approaches the stereotype from a different angle. If Men are truly executing proportionally more hits than Women, then since hits typically remove stones from play, we should see Women&rsquo;s games having more rocks in play. Remember this was part of the stereotype: that Women hitting less results in more stones in play, making for trickier shots and therefore a more interesting game.</p>
+
+    <p>We can evaluate this claim simply by finding the maximum number of stones in play in each end in our SQL database. This gives us maximum stone counts for 5986 ends in Men&rsquo;s games, and 5485 ends in Women&rsquo;s games. So, we plot a histogram of the fraction of ends with each maximum number of stones in play, for Men and for Women:</p>
+
+    <figure>
+      <img src="images/max_stones_in_play_plot.png" alt="Maximum stones in play histogram by gender" style="max-width: 960px;">
+    </figure>
+
+    <p>Looking at this plot, once again the Men&rsquo;s and Women&rsquo;s distributions are pretty similar. Both are peaked at 5 stones in play, though the Men&rsquo;s distribution is more strongly peaked there (Women&rsquo;s games having a slightly higher percentage of games with both higher AND lower maximum stone counts).</p>
+
+    <p>Performing a &chi;&sup2; test on the maximum number of stones in play data, we find p = 5 &times; 10<sup>&minus;10</sup>, so these two distributions are indeed statistically significantly different from each other.</p>
+
+    <p>However, given how similar they look, we once again wonder whether your average game viewer would be able to detect this difference. Using the distributions above, we produce maximum number of stones in play counts for 1000 ends (an event with 100 games of 10 ends each). Here, the &chi;&sup2; test gives us p = 0.6, which is not even close to our threshold for rejecting the null hypothesis. So the observed difference between the maximum number of stones in play between Men&rsquo;s games and Women&rsquo;s games is not noticeable in an event of 100 games, let alone a single game. So, the contention that Women&rsquo;s games have more stones in play, and are more interesting to watch as a result, doesn&rsquo;t seem to hold any water.</p>
+
+    <h3>Conclusions and Discussion</h3>
+
+    <p>We have examined the stereotype that Men prefer to hit more than Women from two angles: looking at the shot types called by the skip, and looking at the maximum number of stones in play. Based on what I had heard growing up a young curler, I was expecting a very pronounced difference between the Men&rsquo;s games and the Women&rsquo;s games, but the data does not seem to back that up. In both analysis methods we found that there are statistically significant differences between the Men&rsquo;s and Women&rsquo;s games, but that these differences are not large enough to be detected by someone watching a single game, or in the case of the maximum number of stones in play, an entire event full of games. Since this stereotype also claims to be obvious, this data does not support the stereotype.</p>
+
+    <p>Note, however, I referred to &ldquo;this data&rdquo;. Something important to keep in mind here is that this dataset is filled with games at the international competition level, where each country competing is sending its very best curling team. If the magnitude of this stereotype is inversely correlated with the skill level of the players, we would not see it at this level of play. (Indeed, any novice curler will tell you that hits are some of the hardest shots to make!) Data on lower level games is probably much more difficult to find, so this hypothesis will have to go untested for now.</p>
+
+    <p>Another aspect not considered here was varying skill levels between the different teams. I was always coached that when facing a superior team that could hit with high accuracy, the better strategy is to &ldquo;play the junk game&rdquo;, to force the opposing team to make trickier finesse shots in order to win. This effect may also be smaller at this high level of play, but there are definitely teams that always tend to do well, and teams that may rarely make it to international competition, so it would be interesting to see how the shot types called change when comparing the accuracy score for the shots made by each team.</p>
+
+    <p>On a similar note, I suspect that the shot type preferences may vary team-to-team anyway. A big part of effective curling strategy is to tailor your strategy to the skill level of your players. Each team may therefore have its own preferences, and it would be interesting to see how this compares to the average we saw in the Men and Women shot type comparison.</p>
+
+    <p>Finally, the logical next extension of these analyses is into a second dimension: time. The strategy at the beginning of an end tends to weigh heavily towards guards and draws, with more take-outs towards the end of the end. Furthermore, as a game progresses, if your team is winning, you will probably pursue a &ldquo;keep it clean&rdquo; strategy, to try and hold on to your lead. Could differences between how Men and Women play the game manifest when considering this time variation? What about considering the score differential? Similarly, we could look at the number of stones in play after each shot in each end, instead of just the maximum number.</p>
+
+    <p>In closing, the stereotype that there is an obvious preference for Men to hit more than Women does not appear to be supported by the data. There are definitely some differences between how Men and Women play the game, but on aggregate these differences seem too small to detect on the scale of an individual game. However, this study has barely scratched the surface of what can be investigated with this dataset, so stay tuned for future analyses!</p>
+  </div>
+</body>
+</html>
